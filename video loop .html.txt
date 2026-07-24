@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nature Loop — Generative Living Scene</title>
+<style>
+  :root{
+    --bg-0:#05070a;
+    --bg-1:#0b0f14;
+    --panel:#0e1318;
+    --panel-edge:#1c242c;
+    --ink:#cfd8e0;
+    --ink-dim:#7f8b96;
+    --accent:#ff4d4d;
+    --accent-soft:rgba(255,77,77,.35);
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:
+      radial-gradient(1200px 800px at 50% -10%, #101820 0%, transparent 60%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1) 60%, #030405 100%);
+    color:var(--ink);
+    font-family:var(--sans);
+    overflow:hidden;
+  }
+
+  .stage{
+    height:100%;
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:clamp(10px, 3vw, 40px);
+  }
+
+  .player{
+    position:relative;
+    width:min(1180px, 100%);
+    aspect-ratio:16/9;
+    background:#000;
+    border-radius:18px;
+    border:1px solid var(--panel-edge);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,.02) inset,
+      0 30px 80px -30px rgba(0,0,0,.9),
+      0 0 120px -60px var(--accent-soft);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .titlebar{
+    position:absolute;
+    top:0; left:0; right:0;
+    z-index:20;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:12px 16px 24px;
+    background:linear-gradient(180deg, rgba(3,5,7,.85) 0%, rgba(3,5,7,.55) 55%, transparent 100%);
+    pointer-events:none;
+    font-family:var(--mono);
+  }
+
+  .rec-dot{
+    width:8px; height:8px; border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 10px 2px var(--accent-soft);
+    animation:blink 1.6s ease-in-out infinite;
+    flex:none;
+  }
+  @keyframes blink{ 0%,45%{opacity:1;} 50%,95%{opacity:.15;} 100%{opacity:1;} }
+
+  .scene-title{
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink);
+    opacity:.9;
+  }
+  .scene-sub{
+    font-size:11px;
+    color:var(--ink-dim);
+    letter-spacing:.04em;
+  }
+  .titlebar .spacer{ flex:1; }
+  .seed-tag{
+    font-size:10.5px;
+    color:var(--ink-dim);
+    letter-spacing:.03em;
+    border:1px solid var(--panel-edge);
+    padding:3px 8px;
+    border-radius:20px;
+    background:rgba(255,255,255,.02);
+  }
+
+  canvas#scene{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    display:block;
+  }
+
+  .grain{
+    position:absolute; inset:0;
+    pointer-events:none;
+    opacity:.05;
+    mix-blend-mode:overlay;
+    z-index:5;
+  }
+
+  .vignette{
+    position:absolute; inset:0;
+    pointer-events:none;
+    z-index:6;
+    box-shadow: inset 0 0 160px 40px rgba(0,0,0,.55);
+  }
+
+  .controls{
+    position:absolute;
+    left:0; right:0; bottom:0;
+    z-index:20;
+    padding:14px 16px 14px;
+    background:linear-gradient(0deg, rgba(3,5,7,.9) 0%, rgba(3,5,7,.5) 60%, transparent 100%);
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .scrub{
+    position:relative;
+    height:3px;
+    width:100%;
+    background:rgba(255,255,255,.12);
+    border-radius:3px;
+    overflow:hidden;
+  }
+  .scrub-fill{
+    position:absolute; top:0; left:0; bottom:0;
+    width:0%;
+    background:linear-gradient(90deg, var(--accent), #ff9d6c);
+    border-radius:3px;
+  }
+
+  .control-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-dim);
+  }
+
+  .control-row .time{ color:var(--ink); min-width:88px; }
+
+  .btn{
+    appearance:none;
+    border:1px solid var(--panel-edge);
+    background:rgba(255,255,255,.03);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.04em;
+    padding:6px 12px;
+    border-radius:8px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    transition:background .15s ease, transform .1s ease, border-color .15s ease;
+  }
+  .btn:hover{ background:rgba(255,255,255,.07); border-color:#2a3540; }
+  .btn:active{ transform:translateY(1px) scale(.98); }
+  .btn.primary{ border-color:var(--accent-soft); }
+  .btn.primary:hover{ background:rgba(255,77,77,.12); }
+
+  .icon-loop{
+    width:12px; height:12px;
+    display:inline-block;
+  }
+
+  .hint{
+    position:absolute;
+    right:16px; bottom:56px;
+    z-index:20;
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--ink-dim);
+    opacity:.7;
+    text-align:right;
+    pointer-events:none;
+  }
+
+  .footer-note{
+    width:min(1180px, 100%);
+    text-align:center;
+    color:var(--ink-dim);
+    font-family:var(--mono);
+    font-size:11px;
+    margin-top:14px;
+    letter-spacing:.03em;
+  }
+  .footer-note b{ color:var(--ink); font-weight:600; }
+
+  @media (max-width: 640px){
+    .control-row{ flex-wrap:wrap; }
+    .hint{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div style="display:flex; flex-direction:column; align-items:center;">
+    <div class="player" id="player">
+      <canvas id="scene"></canvas>
+      <svg class="grain" width="100%" height="100%">
+        <filter id="noiseFilter">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>
+          <feColorMatrix type="saturate" values="0"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#noiseFilter)"/>
+      </svg>
+      <div class="vignette"></div>
+
+      <div class="titlebar">
+        <span class="rec-dot"></span>
+        <div>
+          <div class="scene-title" id="sceneTitle">LOADING SCENE</div>
+          <div class="scene-sub" id="sceneSub">—</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="seed-tag" id="seedTag">seed —</div>
+      </div>
+
+      <div class="hint" id="hint">click canvas to relight fireflies / ripples</div>
+
+      <div class="controls">
+        <div class="scrub"><div class="scrub-fill" id="scrubFill"></div></div>
+        <div class="control-row">
+          <span class="time" id="timeLabel">00:00</span>
+          <span>∞ LOOP</span>
+          <span class="spacer" style="flex:1"></span>
+          <button class="btn" id="pauseBtn">⏸ pause</button>
+          <button class="btn primary" id="reshuffleBtn">⟳ new scene</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Reopening this file reseeds a new <b>season</b>, <b>time of day</b> and <b>weather</b> —
+      no two viewings are quite the same. Currently rendering entirely with code, no video file involved.
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   0. SEEDED RANDOM — reseeded fresh on every page load so the
+      scene is different every time this file is opened.
+   ============================================================ */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+let SEED = (Date.now() ^ (Math.random() * 0xFFFFFFFF)) >>> 0;
+let rand = mulberry32(SEED);
+function rnd(min, max){ return min + rand() * (max - min); }
+function rndInt(min, max){ return Math.floor(rnd(min, max + 1)); }
+function pick(arr){ return arr[Math.floor(rand() * arr.length)]; }
+function chance(p){ return rand() < p; }
+
+/* ============================================================
+   1. SCENE GENERATION — season, time of day, weather, palette
+   ============================================================ */
+const SEASONS = ["spring","summer","autumn","winter"];
+const TIMES   = ["dawn","day","dusk","night"];
+
+function generateScene(){
+  const season = pick(SEASONS);
+  const time   = pick(TIMES);
+
+  let weatherPool = ["clear","clear","clear","fog"];
+  if (season === "winter") weatherPool = ["clear","clear","snow","snow","fog"];
+  else if (season === "autumn") weatherPool = ["clear","clear","rain","fog"];
+  else if (season === "summer") weatherPool = ["clear","clear","clear","rain"];
+  else weatherPool = ["clear","clear","rain","fog"];
+  const weather = pick(weatherPool);
+
+  const windowsOnCabin = chance(0.5);
+  const includeCabin   = chance(0.55);
+  const includeBirds   = (time === "day" || time === "dawn") && chance(0.7) && weather !== "rain";
+  const includeFireflies = (time === "night" || time === "dusk") && (season === "summer" || season === "spring") && weather === "clear" && chance(0.8);
+  const mountainCount = rndInt(2,3);
+  const treeDensity   = rnd(0.55, 1.0);
+  const windStrength  = rnd(0.25, 1.0);
+
+  return {
+    season, time, weather,
+    includeCabin, windowsOnCabin, includeBirds, includeFireflies,
+    mountainCount, treeDensity, windStrength,
+    seed: SEED
+  };
+}
+
+const SCENE = generateScene();
+
+/* Palettes: [sky top, sky mid, sky horizon, sun/moon glow, sun/moon body] per time-of-day,
+   with a seasonal tint multiplier applied afterward. */
+const SKY_PALETTES = {
+  dawn:  { top:"#0b1a2e", mid:"#3a4d73", horizon:"#e8916a", glow:"rgba(255,190,120,.55)", body:"#ffe3b0" },
+  day:   { top:"#2f6ea5", mid:"#6fa9c9", horizon:"#cfe9e6", glow:"rgba(255,255,255,.35)", body:"#fffdf2" },
+  dusk:  { top:"#0e1230", mid:"#5b3a63", horizon:"#e8714f", glow:"rgba(255,140,90,.5)",  body:"#ffcf8f" },
+  night: { top:"#01030c", mid:"#050a1c", horizon:"#0d1730", glow:"rgba(180,200,255,.28)", body:"#eef1ff" }
+};
+
+const SEASON_TINT = {
+  spring: { sat:1.0,  warm:0.0,  ground:"#3c5a3a", groundLow:"#243a24", foliage:["#4d7a44","#6a9c5a","#3d5f38"] },
+  summer: { sat:1.05, warm:0.05, ground:"#345a33", groundLow:"#1f3a1f", foliage:["#356b34","#4f8a44","#2c4d2a"] },
+  autumn: { sat:0.95, warm:0.25, ground:"#5a4326", groundLow:"#3a2a17", foliage:["#c96a2b","#d9932c","#8a3b25"] },
+  winter: { sat:0.55, warm:-0.1, ground:"#c9d3da", groundLow:"#9aa7b0", foliage:["#5c6b63","#3f4b46","#2e3934"] }
+};
+
+/* ============================================================
+   2. CANVAS SETUP
+   ============================================================ */
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function resize(){
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = rect.width; H = rect.height;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener("resize", resize);
+
+/* ============================================================
+   3. UI LABELS
+   ============================================================ */
+const sceneTitle = document.getElementById("sceneTitle");
+const sceneSub   = document.getElementById("sceneSub");
+const seedTag    = document.getElementById("seedTag");
+const timeLabel  = document.getElementById("timeLabel");
+const scrubFill  = document.getElementById("scrubFill");
+const pauseBtn   = document.getElementById("pauseBtn");
+const reshuffleBtn = document.getElementById("reshuffleBtn");
+
+function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function applyLabels(scene){
+  const weatherWord = scene.weather === "clear" ? "" : " · " + capitalize(scene.weather);
+  sceneTitle.textContent = `${capitalize(scene.season)} — ${capitalize(scene.time)}${weatherWord}`;
+  const bits = [];
+  bits.push(`${scene.mountainCount} ridgelines`);
+  if (scene.includeCabin) bits.push("cabin");
+  if (scene.includeFireflies) bits.push("fireflies");
+  if (scene.includeBirds) bits.push("birds");
+  sceneSub.textContent = bits.join(" · ");
+  seedTag.textContent = "seed " + (scene.seed % 100000);
+}
+applyLabels(SCENE);
+
+/* ============================================================
+   4. STARFIELD (persists across regenerate for continuity)
+   ============================================================ */
+let stars = [];
+function buildStars(){
+  stars = [];
+  const count = 140;
+  for (let i=0;i<count;i++){
+    stars.push({
+      x: rand(),
+      y: rand() * 0.65,
+      r: rnd(0.4, 1.6),
+      tw: rnd(0, Math.PI*2),
+      speed: rnd(0.6, 1.6)
+    });
+  }
+}
+buildStars();
+
+/* ============================================================
+   5. MOUNTAIN RIDGES (parallax, procedurally shaped, looping)
+   ============================================================ */
+function buildRidge(baseY, roughness, segments){
+  const pts = [];
+  let y = baseY;
+  for (let i=0;i<=segments;i++){
+    y += rnd(-roughness, roughness);
+    y = Math.max(baseY - roughness*3, Math.min(baseY + roughness*2, y));
+    pts.push(y);
+  }
+  return pts;
+}
+
+let ridges = [];
+function buildMountains(){
+  ridges = [];
+  const n = SCENE.mountainCount;
+  for (let i=0;i<n;i++){
+    const depth = i / n; // 0 = farthest
+    ridges.push({
+      points: buildRidge(0.42 + depth*0.14, 10 + depth*6, 26),
+      depth,
+      parallax: 0.02 + depth*0.05
+    });
+  }
+}
+buildMountains();
+
+function drawRidge(ridge, color, scrollX){
+  const pts = ridge.points;
+  const n = pts.length - 1;
+  const segW = W / (n-2); // overscan by 2 segments each side for seamless scroll
+  ctx.beginPath();
+  ctx.moveTo(-segW*2, H);
+  for (let i=0;i<pts.length;i++){
+    const x = -segW*2 + i*segW + scrollX;
+    ctx.lineTo(x, pts[i]);
+  }
+  ctx.lineTo(W + segW*2, H);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/* ============================================================
+   6. TREE LINE + FOREGROUND TREES (swaying)
+   ============================================================ */
+let trees = [];
+function buildTrees(){
+  trees = [];
+  const density = SCENE.treeDensity;
+  const count = Math.round(18 * density);
+  for (let i=0;i<count;i++){
+    trees.push({
+      x: rand(),
+      scale: rnd(0.5, 1.35),
+      sway: rnd(0.4, 1.2),
+      phase: rnd(0, Math.PI*2),
+      colorIdx: rndInt(0, SEASON_TINT[SCENE.season].foliage.length-1),
+      isConifer: SCENE.season === "winter" ? chance(0.75) : chance(0.35)
+    });
+  }
+  trees.sort((a,b)=> a.scale - b.scale);
+}
+buildTrees();
+
+function drawTree(t, time, windStrength){
+  const foliageColors = SEASON_TINT[SCENE.season].foliage;
+  const x = t.x * W;
+  const groundY = H * 0.86;
+  const scale = t.scale;
+  const trunkH = 60 * scale;
+  const sway = Math.sin(time*0.6*t.sway + t.phase) * 6 * windStrength * scale;
+
+  ctx.save();
+  ctx.translate(x, groundY);
+
+  // trunk
+  ctx.strokeStyle = "rgba(20,16,12,0.9)";
+  ctx.lineWidth = 4*scale;
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.quadraticCurveTo(sway*0.3, -trunkH*0.5, sway, -trunkH);
+  ctx.stroke();
+
+  const topX = sway, topY = -trunkH;
+
+  if (t.isConifer){
+    ctx.fillStyle = SCENE.season === "winter" ? "rgba(255,255,255,0.9)" : foliageColors[t.colorIdx];
+    const layers = 4;
+    for (let l=0; l<layers; l++){
+      const w = (34 - l*7) * scale;
+      const yOff = -trunkH - l*14*scale + 6*scale;
+      ctx.beginPath();
+      ctx.moveTo(topX, yOff - 20*scale);
+      ctx.lineTo(topX - w/2 + sway*0.15*l, yOff);
+      ctx.lineTo(topX + w/2 + sway*0.15*l, yOff);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (SCENE.season === "winter"){
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      for (let l=0; l<layers; l++){
+        const w = (34 - l*7) * scale;
+        const yOff = -trunkH - l*14*scale + 6*scale;
+        ctx.beginPath();
+        ctx.moveTo(topX, yOff-20*scale);
+        ctx.lineTo(topX - w/2*0.5, yOff-4*scale);
+        ctx.lineTo(topX + w/2*0.5, yOff-4*scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  } else {
+    const canopyR = 26 * scale;
+    ctx.fillStyle = foliageColors[t.colorIdx];
+    for (let c=0;c<5;c++){
+      const cx = topX + Math.cos(c*1.3 + t.phase)*canopyR*0.5;
+      const cy = topY - Math.sin(c*1.3 + t.phase)*canopyR*0.3 - canopyR*0.4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, canopyR*0.62, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   7. WATER (reflection + ripple)
+   ============================================================ */
+const waterTopRatio = 0.86;
+
+function drawWater(time, skyColors){
+  const waterY = H * waterTopRatio;
+  const waterH = H - waterY;
+
+  const grad = ctx.createLinearGradient(0, waterY, 0, H);
+  grad.addColorStop(0, skyColors.mid);
+  grad.addColorStop(1, "rgba(2,4,8,0.95)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, waterY, W, waterH);
+
+  // horizontal ripple bands, subtle sine-distorted
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = "#ffffff";
+  for (let i=0;i<6;i++){
+    const y = waterY + 10 + i * (waterH-20)/6;
+    ctx.beginPath();
+    for (let x=0; x<=W; x+=8){
+      const yy = y + Math.sin(x*0.03 + time*1.4 + i) * (2 + i*0.6);
+      if (x===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // sun/moon reflection shimmer column
+  const bodyX = sunMoonX(time);
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = skyColors.body;
+  for (let i=0;i<14;i++){
+    const y = waterY + i*(waterH/14);
+    const wobble = Math.sin(time*2 + i) * 10;
+    const w = Math.max(4, 30 - i*1.6);
+    ctx.fillRect(bodyX - w/2 + wobble, y, w, waterH/14*0.55);
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   8. SUN / MOON POSITION + SKY
+   ============================================================ */
+function sunMoonX(time){
+  return W * (0.5 + 0.32*Math.sin(time*0.05));
+}
+function sunMoonY(time){
+  // slow vertical drift depending on time-of-day baseline
+  const baseline = { dawn:0.62, day:0.22, dusk:0.58, night:0.28 }[SCENE.time];
+  return H * (baseline + 0.03*Math.sin(time*0.05 + 1.2));
+}
+
+function mixColor(hex1, hex2, t){
+  const c1 = hexToRgb(hex1), c2 = hexToRgb(hex2);
+  const r = Math.round(c1.r + (c2.r-c1.r)*t);
+  const g = Math.round(c1.g + (c2.g-c1.g)*t);
+  const b = Math.round(c1.b + (c2.b-c1.b)*t);
+  return `rgb(${r},${g},${b})`;
+}
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const num = parseInt(hex,16);
+  return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+}
+
+function currentSkyColors(){
+  const p = SKY_PALETTES[SCENE.time];
+  return p;
+}
+
+function drawSky(time){
+  const p = currentSkyColors();
+  const grad = ctx.createLinearGradient(0,0,0,H*waterTopRatio);
+  grad.addColorStop(0, p.top);
+  grad.addColorStop(0.55, p.mid);
+  grad.addColorStop(1, p.horizon);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H*waterTopRatio);
+
+  // stars (dawn/dusk fade in/out, night full, day none)
+  const starAlpha = { night:1, dusk:0.5, dawn:0.15, day:0 }[SCENE.time];
+  if (starAlpha > 0){
+    ctx.save();
+    ctx.globalAlpha = starAlpha;
+    for (const s of stars){
+      const tw = 0.5 + 0.5*Math.sin(time*s.speed + s.tw);
+      ctx.fillStyle = `rgba(255,255,255,${0.3 + 0.7*tw})`;
+      ctx.beginPath();
+      ctx.arc(s.x*W, s.y*H*waterTopRatio, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // sun / moon body with glow
+  const bx = sunMoonX(time);
+  const by = sunMoonY(time);
+  const isMoon = SCENE.time === "night";
+  const radius = isMoon ? 26 : 40;
+
+  const glow = ctx.createRadialGradient(bx,by,0, bx,by,radius*4.2);
+  glow.addColorStop(0, p.glow);
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(bx-radius*4.2, by-radius*4.2, radius*8.4, radius*8.4);
+
+  ctx.fillStyle = p.body;
+  ctx.beginPath();
+  ctx.arc(bx,by,radius,0,Math.PI*2);
+  ctx.fill();
+
+  if (isMoon){
+    ctx.fillStyle = "rgba(10,14,26,0.4)";
+    ctx.beginPath();
+    ctx.arc(bx+radius*0.35, by-radius*0.2, radius*0.85, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // clouds
+  drawClouds(time, p);
+}
+
+/* ============================================================
+   9. CLOUDS (looping horizontal drift)
+   ============================================================ */
+let clouds = [];
+function buildClouds(){
+  clouds = [];
+  const count = 6;
+  for (let i=0;i<count;i++){
+    clouds.push({
+      y: rnd(0.08, 0.4),
+      scale: rnd(0.6, 1.6),
+      speed: rnd(0.008, 0.02),
+      offset: rand(),
+      puffs: rndInt(3,5)
+    });
+  }
+}
+buildClouds();
+
+function drawClouds(time, sky){
+  ctx.save();
+  const tint = SCENE.time === "night" ? "rgba(120,130,160,0.5)" :
+               SCENE.time === "dusk"  ? "rgba(255,170,140,0.55)" :
+               SCENE.time === "dawn"  ? "rgba(255,210,180,0.6)" :
+               "rgba(255,255,255,0.85)";
+  ctx.fillStyle = tint;
+  for (const c of clouds){
+    const travel = ((time*c.speed + c.offset) % 1.3) - 0.15;
+    const cx = travel * (W*1.3);
+    const cy = c.y * H * waterTopRatio;
+    ctx.globalAlpha = SCENE.weather === "fog" ? 0.35 : 0.7;
+    for (let p=0;p<c.puffs;p++){
+      const px = cx + p*22*c.scale - (c.puffs*11*c.scale);
+      const py = cy + Math.sin(p*1.7)*6*c.scale;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 26*c.scale, 15*c.scale, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   10. BIRDS
+   ============================================================ */
+let birds = [];
+function buildBirds(){
+  birds = [];
+  if (!SCENE.includeBirds) return;
+  const count = rndInt(3,6);
+  for (let i=0;i<count;i++){
+    birds.push({
+      y: rnd(0.12, 0.32),
+      speed: rnd(0.03, 0.06),
+      offset: rand(),
+      flap: rnd(0,Math.PI*2),
+      scale: rnd(0.7,1.2)
+    });
+  }
+}
+buildBirds();
+
+function drawBirds(time){
+  if (!SCENE.includeBirds) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(20,20,25,0.8)";
+  ctx.lineWidth = 2;
+  for (const b of birds){
+    const travel = ((time*b.speed + b.offset) % 1.4) - 0.2;
+    const x = travel * (W*1.4);
+    const y = b.y * H * waterTopRatio + Math.sin(time*0.8 + b.offset*10)*6;
+    const flap = Math.sin(time*6 + b.flap) * 6 * b.scale;
+    ctx.beginPath();
+    ctx.moveTo(x-8*b.scale, y+flap);
+    ctx.quadraticCurveTo(x, y-6*b.scale, x+8*b.scale, y+flap);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   11. FOREGROUND GRASS / REEDS
+   ============================================================ */
+let grassBlades = [];
+function buildGrass(){
+  grassBlades = [];
+  const count = 90;
+  for (let i=0;i<count;i++){
+    grassBlades.push({
+      x: rand(),
+      h: rnd(14, 46),
+      w: rnd(1.4, 2.6),
+      phase: rnd(0, Math.PI*2),
+      swaySpeed: rnd(0.8, 1.6)
+    });
+  }
+}
+buildGrass();
+
+function drawGrass(time, windStrength){
+  const baseY = H * 0.985;
+  const color = SEASON_TINT[SCENE.season].groundLow;
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  for (const g of grassBlades){
+    const x = g.x * W;
+    const sway = Math.sin(time*g.swaySpeed + g.phase) * 10 * windStrength;
+    ctx.lineWidth = g.w;
+    ctx.beginPath();
+    ctx.moveTo(x, baseY);
+    ctx.quadraticCurveTo(x + sway*0.5, baseY - g.h*0.6, x + sway, baseY - g.h);
+    ctx.stroke();
+  }
+}
+
+/* ============================================================
+   12. CABIN (optional focal point)
+   ============================================================ */
+function drawCabin(time){
+  if (!SCENE.includeCabin) return;
+  const baseY = H*0.86;
+  const x = W*0.72, w = 70, h = 44;
+  ctx.save();
+  ctx.translate(x, baseY);
+
+  ctx.fillStyle = "rgba(15,12,10,0.92)";
+  ctx.fillRect(-w/2, -h, w, h);
+
+  ctx.beginPath();
+  ctx.moveTo(-w/2-8, -h);
+  ctx.lineTo(0, -h-26);
+  ctx.lineTo(w/2+8, -h);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(10,8,7,0.95)";
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(5,4,4,0.9)";
+  ctx.fillRect(-8, -20, 16, 20);
+
+  const lit = SCENE.windowsOnCabin && (SCENE.time === "night" || SCENE.time === "dusk");
+  ctx.fillStyle = lit ? "rgba(255,196,110,0.9)" : "rgba(40,45,55,0.6)";
+  const flicker = lit ? (0.85 + 0.15*Math.sin(time*6)) : 1;
+  ctx.globalAlpha = flicker;
+  ctx.fillRect(-w/2+10, -h+10, 12, 12);
+  ctx.fillRect(w/2-22, -h+10, 12, 12);
+  ctx.globalAlpha = 1;
+
+  if (lit){
+    const glow = ctx.createRadialGradient(0,-h+16,0, 0,-h+16, 60);
+    glow.addColorStop(0, "rgba(255,190,110,0.25)");
+    glow.addColorStop(1, "rgba(255,190,110,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(-60,-h+16-60,120,120);
+  }
+
+  // chimney smoke
+  if (SCENE.season === "winter" || SCENE.time === "night" || SCENE.time === "dusk"){
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#cfd6dc";
+    for (let i=0;i<5;i++){
+      const t = (time*0.25 + i*0.6) % 3;
+      const sx = 4 + Math.sin(time*0.6+i)*6;
+      const sy = -h-26 - t*20;
+      const r = 3 + t*4;
+      ctx.globalAlpha = 0.3 * (1 - t/3);
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+/* ============================================================
+   13. WEATHER PARTICLES: rain / snow / fireflies / leaves
+   ============================================================ */
+let particles = [];
+function buildParticles(){
+  particles = [];
+  if (SCENE.weather === "rain"){
+    for (let i=0;i<160;i++){
+      particles.push({ type:"rain", x:rand()*1.2-0.1, y:rand(), len:rnd(8,18), speed:rnd(6,10) });
+    }
+  } else if (SCENE.weather === "snow"){
+    for (let i=0;i<110;i++){
+      particles.push({ type:"snow", x:rand(), y:rand(), r:rnd(1,3), speed:rnd(0.4,1.1), drift:rnd(-0.3,0.3), phase:rnd(0,Math.PI*2) });
+    }
+  }
+  if (SCENE.includeFireflies){
+    for (let i=0;i<22;i++){
+      particles.push({
+        type:"firefly",
+        x:rand(), y:rnd(0.55,0.85),
+        phase:rnd(0,Math.PI*2), speed:rnd(0.3,0.9),
+        rx:rnd(20,70), ry:rnd(10,40), cx:rand()*W, cy:rnd(0.55,0.85)*H*waterTopRatio
+      });
+    }
+  }
+  if (SCENE.season === "autumn" && SCENE.weather !== "snow"){
+    for (let i=0;i<40;i++){
+      particles.push({ type:"leaf", x:rand(), y:rand()*0.7, speed:rnd(0.3,0.8), drift:rnd(0.5,1.5), phase:rnd(0,Math.PI*2), size:rnd(4,8), colorIdx:rndInt(0,2) });
+    }
+  }
+}
+buildParticles();
+
+function drawParticles(time, dt){
+  const foliageColors = SEASON_TINT[SCENE.season].foliage;
+  for (const p of particles){
+    if (p.type === "rain"){
+      p.y += p.speed * dt;
+      if (p.y > 1.05) p.y = -0.05;
+      const x = p.x*W, y = p.y*H;
+      ctx.strokeStyle = "rgba(200,220,255,0.45)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x-3, y+p.len);
+      ctx.stroke();
+    } else if (p.type === "snow"){
+      p.y += p.speed * dt * 0.12;
+      p.x += Math.sin(time*0.6 + p.phase) * 0.0006;
+      if (p.y > 1.02) p.y = -0.02;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath();
+      ctx.arc(p.x*W, p.y*H, p.r, 0, Math.PI*2);
+      ctx.fill();
+    } else if (p.type === "firefly"){
+      const x = p.cx + Math.cos(time*p.speed + p.phase) * p.rx;
+      const y = p.cy + Math.sin(time*p.speed*1.3 + p.phase) * p.ry;
+      const glowAlpha = 0.4 + 0.6*Math.sin(time*2 + p.phase*3)**2;
+      const g = ctx.createRadialGradient(x,y,0,x,y,8);
+      g.addColorStop(0, `rgba(210,255,140,${0.8*glowAlpha})`);
+      g.addColorStop(1, "rgba(210,255,140,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x-8,y-8,16,16);
+      ctx.fillStyle = `rgba(230,255,180,${glowAlpha})`;
+      ctx.beginPath();
+      ctx.arc(x,y,1.3,0,Math.PI*2);
+      ctx.fill();
+    } else if (p.type === "leaf"){
+      p.y += p.speed * dt * 0.08;
+      p.x += Math.sin(time*0.5 + p.phase) * 0.0009 * p.drift;
+      if (p.y > 1.02) { p.y = -0.02; }
+      const x = p.x*W, y = p.y*H*waterTopRatio;
+      const rot = time*p.speed + p.phase;
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.rotate(rot);
+      ctx.fillStyle = foliageColors[p.colorIdx];
+      ctx.beginPath();
+      ctx.ellipse(0,0,p.size,p.size*0.6,0,0,Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+/* ============================================================
+   14. FOG OVERLAY
+   ============================================================ */
+function drawFog(time){
+  if (SCENE.weather !== "fog") return;
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  for (let i=0;i<3;i++){
+    const y = H*0.55 + i*30;
+    const travel = ((time*0.02*(i+1)) % 1.4) - 0.2;
+    const grad = ctx.createLinearGradient(travel*W*1.4 - W, y, travel*W*1.4 + W, y);
+    grad.addColorStop(0, "rgba(200,210,220,0)");
+    grad.addColorStop(0.5, "rgba(200,210,220,0.18)");
+    grad.addColorStop(1, "rgba(200,210,220,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y-40, W, 100);
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   15. GROUND (between tree base and water)
+   ============================================================ */
+function drawGround(){
+  const groundY = H*0.83;
+  const grad = ctx.createLinearGradient(0, groundY, 0, H*waterTopRatio+2);
+  grad.addColorStop(0, SEASON_TINT[SCENE.season].ground);
+  grad.addColorStop(1, SEASON_TINT[SCENE.season].groundLow);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, groundY, W, H*waterTopRatio - groundY + 2);
+}
+
+/* ============================================================
+   16. MAIN RENDER LOOP
+   ============================================================ */
+let playing = true;
+let startTime = performance.now();
+let elapsed = 0;
+let lastFrame = performance.now();
+const LOOP_SECONDS = 240; // full "playback" cycle for the scrubber / timestamp display
+
+function formatTime(s){
+  const m = Math.floor(s/60).toString().padStart(2,"0");
+  const ss = Math.floor(s%60).toString().padStart(2,"0");
+  return `${m}:${ss}`;
+}
+
+function render(now){
+  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  lastFrame = now;
+  if (playing) elapsed += dt;
+
+  const time = elapsed; // seconds, used directly as the animation clock
+
+  ctx.clearRect(0,0,W,H);
+
+  const sky = currentSkyColors();
+  drawSky(time);
+
+  // mountains, back to front
+  const mountainBaseColors = SCENE.time === "night"
+    ? ["#0a0e18","#0d1220","#111827"]
+    : SCENE.time === "dusk"
+    ? ["#2a2338","#3a2b40","#4a3448"]
+    : SCENE.time === "dawn"
+    ? ["#2a3550","#37455f","#4a566e"]
+    : ["#4a6b86","#3d5a72","#324a5e"];
+  ridges.forEach((r, i)=>{
+    const color = mountainBaseColors[i % mountainBaseColors.length];
+    drawRidge(r, color, Math.sin(time*r.parallax)*20);
+  });
+
+  drawGround();
+  drawBirds(time);
+
+  // trees, back-to-front by scale already sorted
+  for (const t of trees) drawTree(t, time, SCENE.windStrength ?? 0.6);
+
+  drawCabin(time);
+  drawGrass(time, SCENE.windStrength ?? 0.6);
+  drawWater(time, sky);
+  drawParticles(time, dt);
+  drawFog(time);
+
+  // UI: scrubber + timestamp, looping over LOOP_SECONDS
+  const loopT = (elapsed % LOOP_SECONDS) / LOOP_SECONDS;
+  scrubFill.style.width = (loopT*100).toFixed(2) + "%";
+  timeLabel.textContent = formatTime(elapsed % LOOP_SECONDS);
+
+  requestAnimationFrame(render);
+}
+
+/* ============================================================
+   17. INTERACTIONS
+   ============================================================ */
+pauseBtn.addEventListener("click", ()=>{
+  playing = !playing;
+  pauseBtn.textContent = playing ? "⏸ pause" : "▶ play";
+  lastFrame = performance.now();
+});
+
+reshuffleBtn.addEventListener("click", ()=>{
+  SEED = (Date.now() ^ (Math.random()*0xFFFFFFFF)) >>> 0;
+  rand = mulberry32(SEED);
+  Object.assign(SCENE, generateScene());
+  applyLabels(SCENE);
+  buildStars();
+  buildMountains();
+  buildTrees();
+  buildClouds();
+  buildBirds();
+  buildGrass();
+  buildParticles();
+  elapsed = 0;
+});
+
+canvas.addEventListener("click", (e)=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  // spawn a quick ripple burst near the click if it lands on the water
+  if (y > H*waterTopRatio){
+    for (let i=0;i<8;i++){
+      particles.push({
+        type:"snow", // reuse simple particle for a quick sparkle burst
+        x:(x + rnd(-20,20))/W, y:(y + rnd(-10,10))/H,
+        r: rnd(1,2), speed: rnd(0.2,0.5), drift:0, phase:0
+      });
+    }
+  } else if (SCENE.includeFireflies){
+    particles.push({
+      type:"firefly", x:x/W, y:y/H,
+      phase: rand()*Math.PI*2, speed: rnd(0.5,1),
+      rx: rnd(20,50), ry: rnd(10,30), cx:x, cy:y
+    });
+  }
+});
+
+/* ============================================================
+   18. BOOT
+   ============================================================ */
+resize();
+requestAnimationFrame((t)=>{ lastFrame = t; requestAnimationFrame(render); });
+
+})();
+</script>
+</body>
+</html>
